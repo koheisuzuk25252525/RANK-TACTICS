@@ -1,3 +1,4 @@
+import { Duel } from "./Duel";
 import { Campaign } from "./Campaign";
 import { Commentary } from "./Commentary";
 import { MatchConfig, memberNames, triggers, maps } from "./strategy";
@@ -428,10 +429,14 @@ function App({
 }
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <Campaign>
-      {(config, seed, finish) => (
-        <App config={config} initialSeed={seed} onFinish={finish} />
-      )}
-    </Campaign>
+    {new URLSearchParams(location.search).get("mode") === "strategy" ? (
+      <Campaign>
+        {(config, seed, finish) => (
+          <App config={config} initialSeed={seed} onFinish={finish} />
+        )}
+      </Campaign>
+    ) : (
+      <Duel />
+    )}
   </React.StrictMode>,
 );
