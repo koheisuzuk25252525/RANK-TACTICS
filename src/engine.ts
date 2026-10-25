@@ -17,8 +17,29 @@ export type Unit = Point & {
   target?: number;
   tactic: Tactic;
   kills: number;
+  aim?: { target: number; at: Point; remaining: number; duration: number };
+  dashUntil: number;
+  dashReady: number;
+  smokeLeft: number;
+  hitAt: number;
 };
-export type Contact = Point & { id: number; hp: number; seen: number };
+export type Contact = Point & {
+  id: number;
+  hp: number;
+  seen: number;
+  aimingAt?: Point;
+};
+export type CombatEvent = {
+  id: number;
+  kind: "shot" | "hit" | "kill" | "miss" | "contact";
+  at: Point;
+  from?: Point;
+  team: number;
+  damage?: number;
+  visible: boolean;
+  time: number;
+};
+export type Smoke = Point & { until: number };
 export type Intel = {
   allies: Unit[];
   contacts: Contact[];
@@ -35,6 +56,11 @@ export type Game = {
   events: string[];
   winner?: number;
   reason?: string;
+  objective: number[];
+  control: number;
+  effects: CombatEvent[];
+  nextEvent: number;
+  smokes: Smoke[];
   shots: { from: Point; to: Point; ttl: number }[];
 };
 export const stats: Record<
@@ -43,7 +69,7 @@ export const stats: Record<
 > = {
   attacker: { range: 5, vision: 10, damage: 25, rate: 0.8, move: 0.2 },
   gunner: { range: 9, vision: 12, damage: 16, rate: 0.6, move: 0.3 },
-  sniper: { range: 16, vision: 18, damage: 42, rate: 2, move: 0.4 },
+  sniper: { range: 16, vision: 18, damage: 42, rate: 2.8, move: 0.4 },
 };
 export const distance = (a: Point, b: Point) =>
   Math.hypot(a.x - b.x, a.y - b.y);
@@ -101,6 +127,10 @@ export function createGame(seed = 2525): Game {
         guard: false,
         tactic: "auto",
         kills: 0,
+        dashUntil: 0,
+        dashReady: 0,
+        smokeLeft: 1,
+        hitAt: -10,
       }),
     );
   return {
@@ -110,7 +140,12 @@ export function createGame(seed = 2525): Game {
     seed,
     rng: seed >>> 0 || 1,
     intel: [[], []],
-    events: ["作戦開始 — 敵を索敵してください"],
+    events: ["中央の通信局を確保せよ。射撃予兆から退避し、煙幕で射線を切れ"],
+    objective: [0, 0],
+    control: -1,
+    effects: [],
+    nextEvent: 0,
+    smokes: [],
     shots: [],
   };
 }
@@ -127,7 +162,7 @@ export function observe(g: Game, team: number): Intel {
       e.team !== team &&
       e.hp > 0 &&
       allies.some(
-        (a) => distance(a, e) <= stats[a.role].vision && los(g.map, a, e),
+        (a) => distance(a, e) <= stats[a.role].vision && clearShot(g, a, e),
       ),
   );
   const old = g.intel[team].filter(
@@ -135,12 +170,19 @@ export function observe(g: Game, team: number): Intel {
   );
   g.intel[team] = [
     ...old,
-    ...seen.map((e) => ({ id: e.id, x: e.x, y: e.y, hp: e.hp, seen: g.time })),
+    ...seen.map((e) => ({
+      id: e.id,
+      x: e.x,
+      y: e.y,
+      hp: e.hp,
+      seen: g.time,
+      aimingAt: e.role === "sniper" && e.aim ? { ...e.aim.at } : undefined,
+    })),
   ];
   return {
     allies: allies.map((a) => ({ ...a })),
     contacts: g.intel[team].map((c) => ({ ...c })),
-    map: g.map.slice(),
+    map: sightMap(g),
     time: g.time,
   };
 }
@@ -154,6 +196,24 @@ export function decide(
     known.find((c) => c.id === u.target) ??
     [...known].sort((a, b) => distance(u, a) - distance(u, b))[0];
   if (u.order) return { destination: u.order, guard: false };
+  // A visible sniper's locked position can be evaded. No hidden state is consulted.
+  const threat = known.find(
+    (c) =>
+      intel.time - c.seen < 0.15 && c.aimingAt && distance(c.aimingAt, u) < 1.5,
+  );
+  if (threat && u.tactic !== "ambush" && !u.aim) {
+    const candidates = [
+      { x: u.x, y: u.y + 2 },
+      { x: u.x, y: u.y - 2 },
+      { x: u.x + 2, y: u.y },
+      { x: u.x - 2, y: u.y },
+    ];
+    const escape = candidates.find(
+      (p) =>
+        !blocked(intel.map, p) && distance(p, threat) > distance(u, threat),
+    );
+    if (escape) return { destination: escape, guard: false };
+  }
   if (
     target &&
     intel.time - target.seen < 0.15 &&
@@ -163,17 +223,91 @@ export function decide(
     return { target: target.id, guard: true };
   if (u.tactic === "ambush") return { guard: true };
   let destination: Point = target ?? {
-    x: u.team ? 18 : 21,
-    y: 10 + (u.id % 3) * 5,
+    x: u.team ? 21 : 18,
+    y: 14 + (u.id % 3) - 1,
   };
-  if (u.tactic === "flank")
-    destination = { x: target?.x ?? 20, y: u.id % 2 ? 27 : 2 };
+  if (
+    u.tactic === "flank" &&
+    target &&
+    Math.abs(u.y - target.y) < 4 &&
+    distance(u, target) > 5
+  )
+    destination = {
+      x: target.x,
+      y: Math.max(1, Math.min(H - 2, target.y + (u.id % 2 ? -6 : 6))),
+    };
   if (u.tactic === "support") {
     const leader = intel.allies.find((a) => a.role === "attacker");
     if (leader && distance(u, leader) > 4) destination = leader;
   }
   return { destination, guard: false };
 }
+export const OBJECTIVE: Point = { x: 20, y: 14 };
+export function inCover(map: boolean[], u: Point) {
+  return [
+    [1, 0],
+    [-1, 0],
+    [0, 1],
+    [0, -1],
+  ].some(([x, y]) => {
+    const p = { x: u.x + x, y: u.y + y };
+    return p.x >= 0 && p.x < W && p.y >= 0 && p.y < H && map[idx(p)];
+  });
+}
+export function sightMap(g: Game) {
+  const map = g.map.slice();
+  for (const smoke of g.smokes)
+    if (smoke.until > g.time)
+      for (let y = smoke.y - 2; y <= smoke.y + 2; y++)
+        for (let x = smoke.x - 2; x <= smoke.x + 2; x++)
+          if (
+            x >= 0 &&
+            x < W &&
+            y >= 0 &&
+            y < H &&
+            distance(smoke, { x, y }) <= 2
+          )
+            map[y * W + x] = true;
+  return map;
+}
+export function clearShot(g: Game, a: Point, b: Point) {
+  if (
+    g.smokes.some(
+      (s) => s.until > g.time && (distance(s, a) <= 2 || distance(s, b) <= 2),
+    )
+  )
+    return false;
+  return los(sightMap(g), a, b);
+}
+function effect(g: Game, event: Omit<CombatEvent, "id" | "time" | "visible">) {
+  const visible =
+    event.team === 0 ||
+    g.units.some(
+      (a) =>
+        a.team === 0 &&
+        a.hp > 0 &&
+        distance(a, event.at) <= stats[a.role].vision &&
+        clearShot(g, a, event.at),
+    );
+  const fromVisible =
+    !event.from ||
+    event.team === 0 ||
+    g.units.some(
+      (a) =>
+        a.team === 0 &&
+        a.hp > 0 &&
+        distance(a, event.from!) <= stats[a.role].vision &&
+        clearShot(g, a, event.from!),
+    );
+  g.effects.push({
+    ...event,
+    from: fromVisible ? event.from : undefined,
+    id: g.nextEvent++,
+    time: g.time,
+    visible,
+  });
+}
+
 export function pathStep(
   map: boolean[],
   start: Point,
@@ -219,18 +353,38 @@ export function pathStep(
   return p;
 }
 export function score(g: Game, team: number) {
-  return g.units
-    .filter((u) => u.team === team)
-    .reduce((s, u) => s + u.kills * 100 + (u.hp > 0 ? 50 : 0), 0);
+  return (
+    Math.floor(g.objective[team]) +
+    g.units
+      .filter((u) => u.team === team)
+      .reduce((s, u) => s + u.kills * 100 + (u.hp > 0 ? 50 : 0), 0)
+  );
 }
 export function command(
   g: Game,
   id: number,
-  order: { move?: Point; target?: number; tactic?: Tactic },
+  order: {
+    move?: Point;
+    target?: number;
+    tactic?: Tactic;
+    ability?: "dash" | "smoke";
+  },
 ) {
   const u = g.units.find((u) => u.id === id && u.team === 0 && u.hp > 0);
   if (!u || g.winner !== undefined) return;
+  if (order.ability === "dash" && g.time >= u.dashReady) {
+    u.dashUntil = g.time + 2.5;
+    u.dashReady = g.time + 12;
+    g.events.unshift("緊急ダッシュ — 2.5秒間、移動速度2倍");
+  }
+  if (order.ability === "smoke" && u.smokeLeft > 0) {
+    g.smokes.push({ x: u.x, y: u.y, until: g.time + 6 });
+    u.smokeLeft--;
+    u.aim = undefined;
+    g.events.unshift("煙幕展開 — 6秒間、双方の射線と視界を遮断");
+  }
   if (order.move && !blocked(g.map, order.move)) {
+    u.aim = undefined;
     u.order = { ...order.move };
     u.target = undefined;
   }
@@ -242,6 +396,7 @@ export function command(
     u.order = undefined;
   }
   if (order.tactic) {
+    u.aim = undefined;
     u.tactic = order.tactic;
     u.order = undefined;
     u.target = undefined;
@@ -253,41 +408,54 @@ export function tick(g: Game) {
   g.shots = g.shots
     .map((s) => ({ ...s, ttl: s.ttl - DT }))
     .filter((s) => s.ttl > 0);
+  g.smokes = g.smokes.filter((s) => s.until > g.time);
+  g.effects = g.effects.filter((e) => g.time - e.time < 2);
+  const previous = new Set(g.intel[0].map((c) => c.id));
   const views = [observe(g, 0), observe(g, 1)];
+  for (const c of views[0].contacts)
+    if (!previous.has(c.id) && g.time - c.seen < 0.15) {
+      effect(g, { kind: "contact", at: c, team: 1 });
+      g.events.unshift("敵影を確認 — 射線と退避経路を確保せよ");
+    }
+  // Resolve simultaneous intentions before damage: team order grants no first-shot advantage.
+  const actions = new Map(
+    g.units
+      .filter((u) => u.hp > 0)
+      .map((u) => [u.id, decide({ ...u }, views[u.team])]),
+  );
+  for (const u of g.units) if (u.hp > 0) u.guard = actions.get(u.id)!.guard;
+  const volleys: { u: Unit; aim: NonNullable<Unit["aim"]> }[] = [];
   for (const u of g.units) {
     if (u.hp <= 0) continue;
     u.cool = Math.max(0, u.cool - DT);
     u.moveCool = Math.max(0, u.moveCool - DT);
-    const action = decide({ ...u }, views[u.team]);
-    u.guard = action.guard;
-    if (action.target !== undefined && u.cool <= 0) {
-      const enemy = g.units.find((e) => e.id === action.target && e.hp > 0);
-      if (
-        enemy &&
-        distance(u, enemy) <= stats[u.role].range &&
-        los(g.map, u, enemy)
-      ) {
-        const damage = Math.round(
-          stats[u.role].damage *
-            (0.9 + random(g) * 0.2) *
-            (enemy.guard ? 0.65 : 1),
-        );
-        enemy.hp = Math.max(0, enemy.hp - damage);
-        u.cool = stats[u.role].rate;
-        g.shots.push({
-          from: { x: u.x, y: u.y },
-          to: { x: enemy.x, y: enemy.y },
-          ttl: 0.25,
-        });
-        if (!enemy.hp) {
-          u.kills++;
-          g.events.unshift(
-            `${u.team ? "敵" : "味方"} ${u.role} が ${enemy.team ? "敵" : "味方"} ${enemy.role} を撃破`,
-          );
-          g.events = g.events.slice(0, 6);
+    const action = actions.get(u.id)!;
+    if (u.aim) {
+      const enemy = g.units.find((e) => e.id === u.aim!.target && e.hp > 0);
+      if (!enemy || !clearShot(g, u, u.aim.at) || action.destination) {
+        u.aim = undefined;
+      } else {
+        u.aim.remaining -= DT;
+        if (u.aim.remaining <= 0.001) {
+          volleys.push({ u, aim: u.aim });
+          u.aim = undefined;
+          u.cool = stats[u.role].rate;
         }
       }
-    } else if (action.destination && u.moveCool <= 0) {
+    } else if (action.target !== undefined && u.cool <= 0) {
+      const c = views[u.team].contacts.find((c) => c.id === action.target);
+      if (c) {
+        const duration =
+          u.role === "sniper" ? 1.6 : u.role === "gunner" ? 0.55 : 0.35;
+        u.aim = {
+          target: c.id,
+          at: { x: c.x, y: c.y },
+          remaining: duration,
+          duration,
+        };
+      }
+    }
+    if (action.destination && u.moveCool <= 0) {
       const next = pathStep(
         g.map,
         u,
@@ -297,12 +465,53 @@ export function tick(g: Game) {
       if (next) {
         u.x = next.x;
         u.y = next.y;
-        u.moveCool = stats[u.role].move;
+        u.moveCool = stats[u.role].move * (u.dashUntil > g.time ? 0.5 : 1);
       }
       if (u.order && u.x === u.order.x && u.y === u.order.y)
         u.order = undefined;
     }
   }
+  for (const { u, aim } of volleys) {
+    const enemy = g.units.find((e) => e.id === aim.target && e.hp > 0);
+    const from = { x: u.x, y: u.y };
+    effect(g, { kind: "shot", at: aim.at, from, team: u.team });
+    g.shots.push({ from, to: aim.at, ttl: 0.25 });
+    if (!enemy || distance(enemy, aim.at) > 1 || !clearShot(g, u, enemy)) {
+      effect(g, { kind: "miss", at: aim.at, team: u.team });
+      continue;
+    }
+    const damage = Math.round(
+      stats[u.role].damage *
+        (0.9 + random(g) * 0.2) *
+        (enemy.guard ? 0.8 : 1) *
+        (inCover(g.map, enemy) ? 0.65 : 1),
+    );
+    enemy.hp = Math.max(0, enemy.hp - damage);
+    enemy.hitAt = g.time;
+    effect(g, {
+      kind: enemy.hp ? "hit" : "kill",
+      at: { x: enemy.x, y: enemy.y },
+      team: enemy.team,
+      damage,
+    });
+    if (!enemy.hp) {
+      enemy.aim = undefined;
+      u.kills++;
+      g.events.unshift(
+        `${u.team ? "敵" : "味方"} ${u.role} が ${enemy.team ? "敵" : "味方"} ${enemy.role} を撃破`,
+      );
+    }
+  }
+  const presence = [0, 1].map((t) =>
+    g.units.some(
+      (u) => u.team === t && u.hp > 0 && distance(u, OBJECTIVE) <= 3,
+    ),
+  );
+  g.control =
+    presence[0] && presence[1] ? 2 : presence[0] ? 0 : presence[1] ? 1 : -1;
+  if (g.control === 0 || g.control === 1)
+    g.objective[g.control] += DT * (g.time >= 90 ? 6 : 3);
+  g.events = g.events.slice(0, 6);
   const alive = [0, 1].map(
     (t) => g.units.filter((u) => u.team === t && u.hp > 0).length,
   );

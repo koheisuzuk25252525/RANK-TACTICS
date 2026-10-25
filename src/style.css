@@ -423,14 +423,389 @@ footer {
   }
 }
 @media (max-height: 500px) and (orientation: landscape) {
-  .layout { grid-template-columns: minmax(240px, calc((100dvh - 170px) * 1.333)) minmax(210px, 1fr); }
-  .arena { max-width: none; }
-  aside { max-height: calc(100dvh - 125px); overflow-y: auto; padding-right: 5px; }
-  .roster { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .unit { flex-direction: column; gap: 3px; align-items: stretch; padding: 5px; }
-  .badge { font-size: 12px; padding: 2px; width: 24px; }
-  .unit strong { font-size: 10px; }
-  .tactics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  .tactics small { font-size: 8px; }
-  footer { font-size: 9px; }
+  .layout {
+    grid-template-columns: minmax(240px, calc((100dvh - 170px) * 1.333)) minmax(
+        210px,
+        1fr
+      );
+  }
+  .arena {
+    max-width: none;
+  }
+  aside {
+    max-height: calc(100dvh - 125px);
+    overflow-y: auto;
+    padding-right: 5px;
+  }
+  .roster {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .unit {
+    flex-direction: column;
+    gap: 3px;
+    align-items: stretch;
+    padding: 5px;
+  }
+  .badge {
+    font-size: 12px;
+    padding: 2px;
+    width: 24px;
+  }
+  .unit strong {
+    font-size: 10px;
+  }
+  .tactics {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .tactics small {
+    font-size: 8px;
+  }
+  footer {
+    font-size: 9px;
+  }
+}
+/* Operation Dead Signal */
+body {
+  background: radial-gradient(ellipse at 45% 0, #1b2c39 0, #0a131c 65%);
+}
+.missionbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 15px 18px;
+  margin-bottom: 12px;
+  border: 1px solid #4b5b59;
+  border-left: 3px solid #e4c789;
+  background: linear-gradient(110deg, #263531, #10202d);
+}
+.missionbar > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.missionlabel {
+  font-size: 9px;
+  letter-spacing: 2px;
+  color: #d9c18c;
+}
+.missionbar strong {
+  font-size: 17px;
+  letter-spacing: 1px;
+}
+.missionbar small {
+  font-size: 10px;
+  color: #a6b6bd;
+}
+.controlstate {
+  text-align: right;
+  justify-content: center;
+  font-size: 13px;
+  color: #d6c69f;
+}
+.controlstate.state0 {
+  color: #76e1d0;
+}
+.controlstate.state1,
+.controlstate.state2 {
+  color: #ff9b83;
+}
+.combat-alert {
+  padding: 8px 12px;
+  min-height: 30px;
+  letter-spacing: 1px;
+  font-size: 10px;
+  background: #223c42;
+  color: #b0e0db;
+  border-bottom: 1px solid #35535b;
+}
+.combat-alert.critical {
+  background: #582b2a;
+  color: #ffd0b7;
+  border-color: #d26c53;
+  animation: warning 1.2s infinite;
+}
+.endgame .match strong {
+  color: #ffb88d;
+}
+.endgame .arena {
+  border-color: #a97350;
+}
+.abilities {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+  margin-bottom: 18px;
+}
+.abilities button {
+  border-color: #786e4f;
+  background: #302f29;
+  text-align: left;
+}
+.abilities strong {
+  font-size: 12px;
+  color: #f1d59d;
+}
+.abilities small {
+  display: block;
+  font-size: 9px;
+  color: #aeb9b6;
+  margin-top: 5px;
+}
+.wounded {
+  color: #ff997f !important;
+}
+.unit.selected {
+  box-shadow: inset 3px 0 #69d8ce;
+}
+.maphead {
+  background: #16252f;
+}
+.canvas {
+  background: #0d1b24;
+}
+.result {
+  backdrop-filter: blur(7px);
+}
+.result h2 {
+  letter-spacing: 3px;
+}
+.sound {
+  white-space: nowrap;
+}
+.badge {
+  border-radius: 4px;
+}
+button {
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    transform 0.1s;
+}
+button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+@keyframes warning {
+  50% {
+    background: #71352d;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .combat-alert.critical {
+    animation: none;
+  }
+  button {
+    transition: none;
+  }
+}
+@media (max-height: 500px) and (orientation: landscape) {
+  header {
+    margin: 0;
+  }
+  .missionbar {
+    padding: 6px 10px;
+    margin: 5px 0;
+  }
+  .missionbar > div {
+    gap: 2px;
+  }
+  .missionlabel {
+    display: none;
+  }
+  .missionbar strong {
+    font-size: 12px;
+  }
+  .missionbar small {
+    font-size: 8px;
+  }
+  .controlstate {
+    font-size: 10px;
+  }
+  .toolbar {
+    margin-bottom: 5px;
+  }
+  .layout {
+    grid-template-columns: minmax(240px, calc((100dvh - 205px) * 1.333)) minmax(
+        210px,
+        1fr
+      );
+  }
+  aside {
+    max-height: calc(100dvh - 160px);
+  }
+  .combat-alert {
+    font-size: 8px;
+    padding: 5px 8px;
+    min-height: 23px;
+    letter-spacing: 0;
+  }
+  .abilities {
+    margin-bottom: 10px;
+  }
+  .abilities button {
+    padding: 6px;
+  }
+  .abilities small {
+    font-size: 8px;
+  }
+  .unit small {
+    font-size: 8px;
+  }
+  .mapfoot {
+    font-size: 8px;
+  }
+  footer p {
+    margin: 3px 0;
+  }
+}
+@media (max-width: 650px) and (orientation: portrait) {
+  .missionbar {
+    padding: 10px;
+  }
+  .missionbar strong {
+    font-size: 14px;
+  }
+  .controlstate {
+    font-size: 10px;
+  }
+  .missionbar small {
+    font-size: 8px;
+  }
+  aside {
+    display: block;
+  }
+  .roster {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    margin-bottom: 18px;
+  }
+  .unit {
+    padding: 6px;
+    gap: 5px;
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .badge {
+    font-size: 12px;
+    width: 25px;
+    padding: 2px;
+  }
+  .unit strong {
+    font-size: 10px;
+  }
+  .unit small {
+    font-size: 8px;
+  }
+  .tactics {
+    margin-bottom: 14px;
+  }
+  .logs {
+    max-height: 100px;
+    overflow: auto;
+  }
+}
+@media (max-height: 500px) and (orientation: landscape) {
+  .maphead,
+  .mapfoot,
+  footer {
+    display: none;
+  }
+  .layout {
+    grid-template-columns: minmax(240px, calc((100dvh - 147px) * 1.333)) minmax(
+        210px,
+        1fr
+      );
+  }
+  .missionbar {
+    padding: 5px 10px;
+  }
+  .roster {
+    margin-bottom: 8px;
+  }
+  .hint {
+    font-size: 10px;
+  }
+  .abilities small {
+    font-size: 9px;
+  }
+  aside {
+    max-height: calc(100dvh - 124px);
+  }
+  .result {
+    inset: 6%;
+    padding: 8px;
+  }
+  .result h2 {
+    font-size: 22px;
+    margin: 8px;
+  }
+  .result p {
+    font-size: 10px;
+    margin: 4px;
+  }
+  .result button {
+    margin-top: 6px;
+  }
+  .missionbar > div:first-child small {
+    display: none;
+  }
+}
+@media (max-height: 500px) and (orientation: landscape) {
+  header {
+    height: 29px;
+    margin: 0;
+  }
+  h1 {
+    font-size: 22px;
+    margin: 0;
+  }
+  .match strong {
+    font-size: 21px;
+  }
+  .match .live {
+    padding: 4px 8px;
+    font-size: 10px;
+  }
+  .missionbar {
+    height: 32px;
+    padding: 3px 10px;
+    margin: 5px 0;
+  }
+  .missionbar small {
+    line-height: 1;
+  }
+  .toolbar {
+    height: 34px;
+    padding: 3px 0;
+    margin-bottom: 5px;
+    gap: 6px;
+  }
+  .toolbar button {
+    padding: 4px 8px;
+    font-size: 11px;
+    min-height: 25px;
+  }
+  .toolbar input {
+    padding: 4px;
+    font-size: 11px;
+    width: 60px;
+  }
+  .scores b {
+    font-size: 18px;
+  }
+  .scores {
+    gap: 12px;
+    font-size: 10px;
+  }
+  .controlstate {
+    font-size: 10px;
+  }
+  .layout {
+    grid-template-columns: minmax(220px, calc((100dvh - 147px) * 1.333)) minmax(
+        210px,
+        1fr
+      );
+  }
+  aside {
+    max-height: calc(100dvh - 125px);
+  }
 }

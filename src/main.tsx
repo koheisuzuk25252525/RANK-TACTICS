@@ -11,9 +11,11 @@ import {
   observe,
   stats,
   distance,
-  los,
+  clearShot,
+  inCover,
 } from "./engine";
 import "./style.css";
+import { unlockAudio, playCombat } from "./audio";
 const names = {
   attacker: "アタッカー",
   gunner: "ガンナー",
@@ -25,11 +27,21 @@ function App() {
   const [selected, select] = useState(0);
   const [paused, pause] = useState(true);
   const [speed, setSpeed] = useState(1);
+  const [sound, setSound] = useState(false);
+  const played = useRef(-1);
   const [seed, setSeed] = useState("2525");
   const [hint, setHint] = useState(
-    "開始後、味方を選択してマップに指示できます",
+    "中央の通信局を確保。赤いLOCKが出たら移動か煙幕で退避",
   );
   const g = ref.current;
+  useEffect(() => {
+    if (g.time === 0) played.current = -1;
+    for (const event of g.effects) {
+      if (event.id > played.current && event.visible && sound)
+        playCombat(event);
+      played.current = Math.max(played.current, event.id);
+    }
+  }, [g, g.time, sound]);
   const refresh = () => render((n) => n + 1);
   useEffect(() => {
     let accumulated = 0,
@@ -48,6 +60,12 @@ function App() {
     }, 33);
     return () => clearInterval(timer);
   }, [paused, speed]);
+  useEffect(() => {
+    if (g.units[selected]?.hp <= 0) {
+      const alive = g.units.find((u) => u.team === 0 && u.hp > 0);
+      if (alive) select(alive.id);
+    }
+  }, [g, g.time, selected]);
   const unit = g.units.find((u) => u.id === selected)!;
   function point(x: number, y: number) {
     const ally = g.units.find(
@@ -69,7 +87,7 @@ function App() {
             a.team === 0 &&
             a.hp > 0 &&
             distance(a, u) <= stats[a.role].vision &&
-            los(g.map, a, u),
+            clearShot(g, a, u),
         ),
     );
     if (enemy) {
@@ -86,10 +104,10 @@ function App() {
     refresh();
   }
   return (
-    <main>
+    <main className={g.time >= 90 ? "endgame" : ""}>
       <header>
         <div>
-          <span className="eyebrow">TACTICAL SIMULATION / v0.1</span>
+          <span className="eyebrow">URBAN OPERATIONS / v0.2</span>
           <h1>
             RANK <b>TACTICS</b>
           </h1>
@@ -108,6 +126,26 @@ function App() {
           </strong>
         </div>
       </header>
+      <section className="missionbar">
+        <div>
+          <span className="missionlabel">MISSION 01 / DEAD SIGNAL</span>
+          <strong>通信局を確保せよ</strong>
+          <small>確保 +3点/秒 ・ 残り30秒は得点2倍</small>
+        </div>
+        <div className={`controlstate state${g.control}`}>
+          {g.control === 2
+            ? "交戦中 / 確保阻止"
+            : g.control === 0
+              ? "BLUE 確保中"
+              : g.control === 1
+                ? "RED 確保中"
+                : "通信局 未確保"}
+          <small>
+            確保点 BLUE {Math.floor(g.objective[0])} : RED{" "}
+            {Math.floor(g.objective[1])}
+          </small>
+        </div>
+      </section>
       <section className="toolbar">
         <div className="scores">
           <span>
@@ -135,6 +173,15 @@ function App() {
             </button>
           ))}
         </div>
+        <button
+          className="sound"
+          onClick={() => {
+            if (!sound) unlockAudio();
+            setSound(!sound);
+          }}
+        >
+          音 {sound ? "ON" : "OFF"}
+        </button>
         <label>
           SEED{" "}
           <input
@@ -148,6 +195,7 @@ function App() {
             ref.current = createGame(Number(seed) || 1);
             pause(true);
             select(0);
+            setSpeed(1);
             refresh();
             setHint("新しい試合を準備しました");
           }}
@@ -161,13 +209,38 @@ function App() {
             <span>SECTOR 04 / 市街地</span>
             <span>40 × 30　遮蔽物あり</span>
           </div>
-          <Battlefield game={g} selected={selected} onPoint={point} />
+          <div
+            className={`combat-alert ${g.units.some((u) => u.team === 0 && u.hp > 0 && u.hp < 35) ? "critical" : ""}`}
+            role="status"
+          >
+            {g.winner !== undefined
+              ? "作戦終了"
+              : paused
+                ? "TACTICAL PAUSE — 時間を止めて指示できます"
+                : g.units.some((u) => u.team === 0 && u.hp > 0 && u.hp < 35)
+                  ? "味方が危険 — 煙幕を展開して退避せよ"
+                  : g.effects.some(
+                        (e) => e.kind === "contact" && g.time - e.time < 2,
+                      )
+                    ? "CONTACT — 敵影を確認"
+                    : g.time >= 90
+                      ? "FINAL 30 — 通信局の確保点が2倍"
+                      : g.control === 1
+                        ? "敵が通信局を確保 — このままでは得点差が広がります"
+                        : "通信局へ前進 — 建物の縁で被ダメージ軽減"}
+          </div>
+          <Battlefield
+            game={g}
+            selected={selected}
+            onPoint={point}
+            paused={paused}
+          />
           <div className="mapfoot">
             <span>
               <i className="blue" /> 味方　
               <i className="red" /> 視認中の敵　 ? 最終確認地点（8秒）
             </span>
-            <span>A 近接火力 / G 中距離 / S 長距離</span>
+            <span>赤いLOCK＝狙撃予兆 / COVER＝遮蔽物 / 円＝射程</span>
           </div>
           {g.winner !== undefined && (
             <div className="result">
@@ -182,11 +255,13 @@ function App() {
               <p>
                 {g.reason} · BLUE {score(g, 0)} / RED {score(g, 1)}
               </p>
-              <p>撃破 100点 / 生存 50点（1名あたり）</p>
+              <p>撃破100点 + 生存50点/名 + 通信局確保点</p>
               <button
                 onClick={() => {
                   ref.current = createGame(Number(seed) || 1);
                   pause(true);
+                  select(0);
+                  setSpeed(1);
                   refresh();
                 }}
               >
@@ -214,9 +289,61 @@ function App() {
                       {u.hp > 0 ? `${u.hp} HP · ${u.kills} KILL` : "撃破"}
                     </small>
                     <meter value={u.hp} max={100} />
+                    <small className={u.hp < 35 ? "wounded" : ""}>
+                      {u.hp <= 0
+                        ? "通信途絶"
+                        : u.aim
+                          ? "照準中"
+                          : u.order
+                            ? "移動指示中"
+                            : inCover(g.map, u)
+                              ? "遮蔽物に隣接"
+                              : u.tactic === "ambush"
+                                ? "待ち伏せ中"
+                                : "索敵 / 交戦"}
+                    </small>
                   </span>
                 </button>
               ))}
+          </div>
+          <h2>
+            緊急アクション <span>{names[unit.role]}</span>
+          </h2>
+          <div className="abilities">
+            <button
+              disabled={
+                unit.hp <= 0 ||
+                g.winner !== undefined ||
+                g.time < unit.dashReady
+              }
+              onClick={() => {
+                command(g, selected, { ability: "dash" });
+                setHint("ダッシュ発動。マップで退避先を指定してください");
+                refresh();
+              }}
+            >
+              <strong>ダッシュ</strong>
+              <small>
+                {g.time < unit.dashReady
+                  ? `${Math.ceil(unit.dashReady - g.time)}秒で再使用`
+                  : "2.5秒加速 / 再使用12秒"}
+              </small>
+            </button>
+            <button
+              disabled={
+                unit.hp <= 0 || g.winner !== undefined || unit.smokeLeft === 0
+              }
+              onClick={() => {
+                command(g, selected, { ability: "smoke" });
+                setHint("煙幕展開。敵味方の視界を遮断します。今のうちに移動を");
+                refresh();
+              }}
+            >
+              <strong>
+                煙幕 <b>×{unit.smokeLeft}</b>
+              </strong>
+              <small>6秒間、射線を切る / 1回</small>
+            </button>
           </div>
           <h2>
             戦術指示 <span>選択した1名</span>
@@ -256,7 +383,7 @@ function App() {
           視認中の敵で攻撃指示。移動指示は戦術より優先されます。
         </p>
         <p>
-          制限120秒。撃破点＋生存点で決着 / リング＝防御（被ダメージ35%減） /
+          制限120秒。撃破＋生存＋通信局確保点で決着 / COVER＝被ダメージ35%減 /
           横画面推奨
         </p>
       </footer>
