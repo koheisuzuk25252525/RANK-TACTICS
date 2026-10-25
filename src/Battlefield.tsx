@@ -1,3 +1,5 @@
+import { canSee, combatStats } from "./engine";
+import { active } from "./strategy";
 import { useEffect, useRef } from "react";
 import { Application, Graphics, Text, Container } from "pixi.js";
 import {
@@ -89,7 +91,12 @@ export function Battlefield({
           const visible = (point: { x: number; y: number }) =>
             allies.some(
               (a) =>
-                distance(a, point) <= stats[a.role].vision &&
+                distance(a, point) <=
+                  (g.config?.map === "night"
+                    ? 6
+                    : g.config
+                      ? 12
+                      : stats[a.role].vision) &&
                 !g.smokes.some((s) => distance(s, a) <= 2) &&
                 los(visionMap, a, point),
             );
@@ -102,7 +109,15 @@ export function Battlefield({
               const seen = !wall && visible({ x, y });
               graphics
                 .rect(px, py, size, size)
-                .fill(wall ? 0x263747 : seen ? 0x223743 : 0x111f2a);
+                .fill(
+                  wall
+                    ? 0x263747
+                    : g.config?.map === "flood" && y >= 11 && y <= 18
+                      ? 0x163e52
+                      : seen
+                        ? 0x223743
+                        : 0x111f2a,
+                );
               if (wall) {
                 graphics
                   .rect(px + 2, py + 2, size - 4, size - 4)
@@ -156,18 +171,24 @@ export function Battlefield({
             const ux = (selectedUnit.x + 0.5) * size,
               uy = (selectedUnit.y + 0.5) * size;
             graphics
-              .circle(ux, uy, stats[selectedUnit.role].range * size)
+              .circle(ux, uy, combatStats(selectedUnit).range * size)
               .stroke({ color: 0x72d9cd, width: 1, alpha: 0.18 });
           }
           for (const c of g.intel[0])
-            if (g.time - c.seen > 0.15) {
+            if (c.radar || g.time - c.seen > 0.15) {
               graphics
                 .circle((c.x + 0.5) * size, (c.y + 0.5) * size, 12)
                 .stroke({ color: 0xaf846e, width: 1, alpha: 0.65 });
-              label("?", (c.x + 0.5) * size, (c.y + 0.5) * size, 0xba9b85, 15);
+              label(
+                c.radar ? "RAD" : "?",
+                (c.x + 0.5) * size,
+                (c.y + 0.5) * size,
+                0xba9b85,
+                15,
+              );
             }
           for (const u of g.units) {
-            if (u.team === 1 && !visible(u)) continue;
+            if (u.team === 1 && !canSee(g, 0, u)) continue;
             const target = { x: (u.x + 0.5) * size, y: (u.y + 0.5) * size };
             let pos = positions.get(u.id);
             if (!pos || g.time === 0) {
@@ -201,13 +222,21 @@ export function Battlefield({
                 .lineTo(ax, ay)
                 .stroke({
                   color: u.team ? 0xff5c54 : 0xffdf85,
-                  width: u.role === "sniper" ? 2 : 1,
+                  width: (
+                    u.kit
+                      ? active(u.kit).includes("sniper")
+                      : u.role === "sniper"
+                  )
+                    ? 2
+                    : 1,
                   alpha: 0.25 + progress * 0.55,
                 });
               graphics
                 .circle(ax, ay, 22 - progress * 12)
                 .stroke({ color: u.team ? 0xff5c54 : 0xffdf85, width: 2 });
-              if (u.role === "sniper")
+              if (
+                u.kit ? active(u.kit).includes("sniper") : u.role === "sniper"
+              )
                 label("LOCK", ax, ay - 28, u.team ? 0xff8c79 : 0xffe1a0, 10);
             }
             if (u.id === s)
@@ -236,14 +265,15 @@ export function Battlefield({
             graphics
               .moveTo(x, y)
               .lineTo(x + Math.cos(angle) * 19, y + Math.sin(angle) * 19)
-              .stroke({ color: 0xd5e1e4, width: u.role === "sniper" ? 4 : 3 });
-            label(
-              { attacker: "A", gunner: "G", sniper: "S" }[u.role],
-              x,
-              y + 3,
-              0xffffff,
-              11,
-            );
+              .stroke({
+                color: 0xd5e1e4,
+                width: (
+                  u.kit ? active(u.kit).includes("sniper") : u.role === "sniper"
+                )
+                  ? 4
+                  : 3,
+              });
+            label(String((u.id % 3) + 1), x, y + 3, 0xffffff, 11);
             graphics
               .roundRect(x - 14, y + 18, 28, 4, 2)
               .fill(0x1d141b)

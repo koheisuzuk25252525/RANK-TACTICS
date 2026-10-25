@@ -1,3 +1,7 @@
+import { Campaign } from "./Campaign";
+import { Commentary } from "./Commentary";
+import { MatchConfig, memberNames, triggers, maps } from "./strategy";
+import { canSee } from "./engine";
 import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Battlefield } from "./Battlefield";
@@ -21,15 +25,23 @@ const names = {
   gunner: "ガンナー",
   sniper: "スナイパー",
 };
-function App() {
-  const ref = useRef(createGame());
+function App({
+  config,
+  initialSeed,
+  onFinish,
+}: {
+  config: MatchConfig;
+  initialSeed: number;
+  onFinish: (winner: number) => void;
+}) {
+  const ref = useRef(createGame(initialSeed, config));
   const [, render] = useState(0);
   const [selected, select] = useState(0);
   const [paused, pause] = useState(true);
   const [speed, setSpeed] = useState(1);
   const [sound, setSound] = useState(false);
   const played = useRef(-1);
-  const [seed, setSeed] = useState("2525");
+  const [seed, setSeed] = useState(String(initialSeed));
   const [hint, setHint] = useState(
     "中央の通信局を確保。赤いLOCKが出たら移動か煙幕で退避",
   );
@@ -82,13 +94,7 @@ function App() {
         u.hp > 0 &&
         u.x === x &&
         u.y === y &&
-        g.units.some(
-          (a) =>
-            a.team === 0 &&
-            a.hp > 0 &&
-            distance(a, u) <= stats[a.role].vision &&
-            clearShot(g, a, u),
-        ),
+        g.units.some((a) => a.team === 0 && a.hp > 0 && canSee(g, 0, u)),
     );
     if (enemy) {
       command(g, selected, { target: enemy.id });
@@ -107,7 +113,7 @@ function App() {
     <main className={g.time >= 90 ? "endgame" : ""}>
       <header>
         <div>
-          <span className="eyebrow">URBAN OPERATIONS / v0.2</span>
+          <span className="eyebrow">RANK SEASON / v0.3</span>
           <h1>
             RANK <b>TACTICS</b>
           </h1>
@@ -192,7 +198,7 @@ function App() {
         </label>
         <button
           onClick={() => {
-            ref.current = createGame(Number(seed) || 1);
+            ref.current = createGame(Number(seed) || 1, config);
             pause(true);
             select(0);
             setSpeed(1);
@@ -206,7 +212,7 @@ function App() {
       <div className="layout">
         <section className="arena">
           <div className="maphead">
-            <span>SECTOR 04 / 市街地</span>
+            <span>{maps[config.map].name}</span>
             <span>40 × 30　遮蔽物あり</span>
           </div>
           <div
@@ -258,7 +264,7 @@ function App() {
               <p>撃破100点 + 生存50点/名 + 通信局確保点</p>
               <button
                 onClick={() => {
-                  ref.current = createGame(Number(seed) || 1);
+                  ref.current = createGame(Number(seed) || 1, config);
                   pause(true);
                   select(0);
                   setSpeed(1);
@@ -267,10 +273,36 @@ function App() {
               >
                 同じシードで再戦
               </button>
+              <button className="primary" onClick={() => onFinish(g.winner!)}>
+                結果を記録して作戦会議へ
+              </button>
             </div>
           )}
         </section>
         <aside>
+          <Commentary game={g} />
+          <h2>起動トリガー / {memberNames[unit.id]}</h2>
+          <div className="battle-slots">
+            {unit.kit?.slots.map((t, i) => (
+              <button
+                key={i}
+                disabled={unit.hp <= 0 || g.winner !== undefined}
+                className={
+                  unit.kit?.main === i || unit.kit?.sub === i ? "active" : ""
+                }
+                onClick={() => {
+                  command(g, selected, { slot: i });
+                  refresh();
+                }}
+              >
+                <small>
+                  {i < 4 ? "M" : "S"}
+                  {(i % 4) + 1}
+                </small>
+                {triggers[t][0]}
+              </button>
+            ))}
+          </div>
           <h2>部隊 / BLUE TEAM</h2>
           <div className="roster">
             {g.units
@@ -282,9 +314,9 @@ function App() {
                   key={u.id}
                   onClick={() => select(u.id)}
                 >
-                  <span className="badge">{u.role[0].toUpperCase()}</span>
+                  <span className="badge">{u.id + 1}</span>
                   <span>
-                    <strong>{names[u.role]}</strong>
+                    <strong>{memberNames[u.id]}</strong>
                     <small>
                       {u.hp > 0 ? `${u.hp} HP · ${u.kills} KILL` : "撃破"}
                     </small>
@@ -307,14 +339,15 @@ function App() {
               ))}
           </div>
           <h2>
-            緊急アクション <span>{names[unit.role]}</span>
+            緊急アクション <span>{memberNames[unit.id]}</span>
           </h2>
           <div className="abilities">
             <button
               disabled={
                 unit.hp <= 0 ||
                 g.winner !== undefined ||
-                g.time < unit.dashReady
+                g.time < unit.dashReady ||
+                !unit.kit?.slots.includes("dash")
               }
               onClick={() => {
                 command(g, selected, { ability: "dash" });
@@ -331,7 +364,10 @@ function App() {
             </button>
             <button
               disabled={
-                unit.hp <= 0 || g.winner !== undefined || unit.smokeLeft === 0
+                unit.hp <= 0 ||
+                g.winner !== undefined ||
+                unit.smokeLeft === 0 ||
+                !unit.kit?.slots.includes("smoke")
               }
               onClick={() => {
                 command(g, selected, { ability: "smoke" });
@@ -392,6 +428,10 @@ function App() {
 }
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <App />
+    <Campaign>
+      {(config, seed, finish) => (
+        <App config={config} initialSeed={seed} onFinish={finish} />
+      )}
+    </Campaign>
   </React.StrictMode>,
 );

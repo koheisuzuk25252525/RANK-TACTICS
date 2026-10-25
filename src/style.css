@@ -809,3 +809,163 @@ button:active:not(:disabled) {
     max-height: calc(100dvh - 125px);
   }
 }
+.brief-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.5fr;
+  gap: 16px;
+}
+.brief-card {
+  border: 1px solid #334e5c;
+  background: #102431;
+  padding: 20px;
+  border-radius: 8px;
+}
+.brief-card h2 {
+  margin-top: 20px;
+}
+.brief-card p,
+.brief-note {
+  font-size: 12px;
+  line-height: 1.8;
+  color: #aabecb;
+}
+.brief-card small {
+  font-size: 10px;
+  color: #aabecb;
+}
+.brief-card select {
+  max-width: 100%;
+  background: #1b3445;
+  color: #def0f2;
+  border: 1px solid #476270;
+  padding: 9px;
+  border-radius: 4px;
+}
+.standing {
+  display: flex;
+  gap: 15px;
+  padding: 12px 0;
+  border-bottom: 1px solid #304551;
+}
+.standing span {
+  flex: 1;
+}
+.standing.ours {
+  color: #7ce2cf;
+}
+.drawn {
+  margin: 16px 0;
+  padding: 16px;
+  background: #213b3d;
+  border-left: 3px solid #dfc68d;
+}
+.drawn strong {
+  display: block;
+  margin-top: 8px;
+}
+.slot {
+  display: grid;
+  grid-template-columns: 20px 12px 100px 1fr;
+  gap: 6px;
+  align-items: center;
+  margin: 7px 0;
+}
+.slot input {
+  width: auto;
+  margin: 0;
+}
+.slot small {
+  font-size: 9px;
+}
+.launch {
+  display: block;
+  margin: 24px auto;
+  padding: 15px 50px !important;
+}
+.commentary-desk {
+  background: #21353d;
+  border-left: 3px solid #e2cb93;
+  padding: 12px;
+  margin-bottom: 16px;
+}
+.commentary-desk small {
+  color: #e2cb93;
+  font-size: 10px;
+}
+.commentary-desk p {
+  font-size: 12px;
+  line-height: 1.8;
+  margin: 6px 0;
+}
+.commentary-desk div {
+  font-size: 9px;
+  color: #98b1bd;
+}
+.battle-slots {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  margin-bottom: 15px;
+}
+.battle-slots button {
+  font-size: 10px;
+  padding: 7px 3px;
+}
+.battle-slots small {
+  display: block;
+  color: #9db8bd;
+  font-size: 8px;
+}
+.result {
+  inset: 10% 8%;
+}
+.result button {
+  margin-top: 7px;
+}
+@media (max-width: 1000px) {
+  .brief-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .kit-editor {
+    grid-column: 1/-1;
+  }
+  .brief-card {
+    padding: 14px;
+  }
+  .slot {
+    grid-template-columns: 20px 12px 120px 1fr;
+  }
+}
+@media (max-width: 600px) {
+  .brief-grid {
+    grid-template-columns: 1fr;
+  }
+  .briefing header {
+    align-items: start;
+  }
+  .briefing header > span {
+    font-size: 10px;
+  }
+  .slot {
+    grid-template-columns: 20px 12px 100px 1fr;
+  }
+}
+@media (max-height: 500px) and (orientation: landscape) {
+  .commentary-desk {
+    padding: 7px;
+    margin-bottom: 8px;
+  }
+  .commentary-desk p {
+    font-size: 10px;
+    line-height: 1.5;
+  }
+  .battle-slots {
+    margin-bottom: 8px;
+  }
+  .result {
+    inset: 2%;
+  }
+  .result h2 {
+    font-size: 18px;
+  }
+}
